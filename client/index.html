@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 图像探测器</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes scan {
+      0% { top: 0%; opacity: 0; }
+      10% { opacity: 1; }
+      90% { opacity: 1; }
+      100% { top: 100%; opacity: 0; }
+    }
+    .scanner-line {
+      animation: scan 2s linear infinite;
+      box-shadow: 0 0 15px 2px rgba(59, 130, 246, 0.8);
+    }
+    .glass-overlay {
+      backdrop-filter: blur(4px);
+    }
+  </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen flex flex-col items-center py-12 font-sans">
+  <div class="text-center mb-8">
+    <h1 class="text-4xl font-bold mb-2 bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+      AI 图像探测器
+    </h1>
+  </div>
+
+  <div class="w-full max-w-md bg-gray-800 rounded-2xl p-6 shadow-2xl border border-gray-700 relative overflow-hidden">
+    <div id="upload-area" class="relative w-full h-64 border-2 border-dashed border-gray-600 rounded-xl overflow-hidden flex justify-center items-center bg-gray-900 group cursor-pointer hover:bg-gray-800 transition">
+      <div id="upload-hint" class="flex flex-col items-center p-4 text-center">
+        <svg class="w-12 h-12 text-gray-400 mb-2 group-hover:text-blue-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+        </svg>
+        <span class="text-gray-400 group-hover:text-blue-400 transition font-medium">点击上传待检测图片</span>
+        <span class="text-xs text-gray-500 mt-2">支持 JPG, PNG, WEBP</span>
+      </div>
+
+      <img id="image-preview" class="absolute inset-0 w-full h-full object-contain hidden bg-black/50" src="" alt="预览">
+
+      <div id="loading-overlay" class="absolute inset-0 bg-blue-500/20 glass-overlay z-10 hidden">
+        <div class="absolute left-0 w-full h-1 bg-blue-400 scanner-line z-20"></div>
+        <div class="absolute inset-0 flex justify-center items-center z-30">
+          <span class="text-blue-300 font-bold tracking-widest animate-pulse drop-shadow-md bg-gray-900/50 px-4 py-2 rounded-lg">
+            模型分析中...
+          </span>
+        </div>
+      </div>
+
+      <input type="file" id="file-input" class="hidden" accept="image/jpeg, image/png, image/webp">
+    </div>
+
+    <button id="submit-btn" disabled class="w-full mt-6 py-3 rounded-xl font-bold transition-all duration-300 bg-gray-700 text-gray-500 cursor-not-allowed tracking-wider">
+      开始检测
+    </button>
+
+    <div id="result-area" class="mt-6 p-4 rounded-xl bg-gray-900 border border-gray-700 hidden opacity-0 transition-opacity duration-500">
+      <div class="flex items-center justify-between mb-3">
+        <span class="text-sm font-semibold text-gray-400">AI 生成概率</span>
+        <span id="prob-text" class="text-3xl font-black text-green-400">0%</span>
+      </div>
+
+      <div class="w-full h-2.5 bg-gray-800 rounded-full mb-5 overflow-hidden shadow-inner">
+        <div id="prob-bar" class="h-full bg-green-500 w-0 transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(34,197,94,0.5)]"></div>
+      </div>
+
+      <div class="text-sm text-gray-300 leading-relaxed bg-gray-800 p-4 rounded-lg flex items-start gap-3 border border-gray-700/50 shadow-inner">
+        <svg id="result-icon" class="w-6 h-6 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"></svg>
+        <p id="reason-text" class="whitespace-pre-line">分析理由将在这里显示...</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const uploadArea = document.getElementById("upload-area");
+    const fileInput = document.getElementById("file-input");
+    const uploadHint = document.getElementById("upload-hint");
+    const imagePreview = document.getElementById("image-preview");
+    const loadingOverlay = document.getElementById("loading-overlay");
+    const submitBtn = document.getElementById("submit-btn");
+    const resultArea = document.getElementById("result-area");
+
+    let currentBase64 = "";
+
+    uploadArea.addEventListener("click", () => {
+      if (!loadingOverlay.classList.contains("hidden")) return;
+      fileInput.click();
+    });
+
+    fileInput.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        currentBase64 = event.target.result;
+        imagePreview.src = currentBase64;
+        imagePreview.classList.remove("hidden");
+        uploadHint.classList.add("hidden");
+
+        submitBtn.disabled = false;
+        submitBtn.className = "w-full mt-6 py-3 rounded-xl font-bold transition-all duration-300 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white shadow-lg hover:shadow-blue-500/30 tracking-wider";
+
+        resultArea.classList.add("hidden");
+        resultArea.classList.remove("opacity-100");
+      };
+
+      reader.readAsDataURL(file);
+    });
+
+    submitBtn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!currentBase64) return;
+
+      loadingOverlay.classList.remove("hidden");
+      submitBtn.disabled = true;
+      submitBtn.textContent = "正在分析...";
+      submitBtn.classList.add("opacity-70", "cursor-not-allowed");
+      resultArea.classList.add("hidden");
+
+      try {
+        const response = await fetch("/api/detect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageBase64: currentBase64 })
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || "请求失败");
+        }
+
+        showResult(data.probability, data.reason);
+      } catch (error) {
+        alert("分析出错：" + error.message);
+      } finally {
+        loadingOverlay.classList.add("hidden");
+        submitBtn.disabled = false;
+        submitBtn.textContent = "重新检测";
+        submitBtn.classList.remove("opacity-70", "cursor-not-allowed");
+      }
+    });
+
+    function showResult(probability, reason) {
+      const probText = document.getElementById("prob-text");
+      const probBar = document.getElementById("prob-bar");
+      const reasonText = document.getElementById("reason-text");
+      const resultIcon = document.getElementById("result-icon");
+
+      probText.textContent = `${probability}%`;
+      reasonText.textContent = reason;
+
+      const isAI = probability > 50;
+      const colorClass = isAI ? "text-red-400" : "text-green-400";
+      const bgClass = isAI ? "bg-red-500" : "bg-green-500";
+      const shadowClass = isAI ? "shadow-[0_0_10px_rgba(239,68,68,0.5)]" : "shadow-[0_0_10px_rgba(34,197,94,0.5)]";
+
+      probText.className = `text-3xl font-black ${colorClass}`;
+      probBar.className = `h-full ${bgClass} ${shadowClass} w-0 transition-all duration-1000 ease-out`;
+      probBar.style.width = "0%";
+      setTimeout(() => {
+        probBar.style.width = `${probability}%`;
+      }, 50);
+
+      if (isAI) {
+        resultIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>';
+        resultIcon.className = "w-6 h-6 shrink-0 mt-0.5 text-red-400";
+      } else {
+        resultIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
+        resultIcon.className = "w-6 h-6 shrink-0 mt-0.5 text-green-400";
+      }
+
+      resultArea.classList.remove("hidden");
+      setTimeout(() => {
+        resultArea.classList.add("opacity-100");
+      }, 10);
+    }
+  </script>
+</body>
+</html>
