@@ -44,6 +44,15 @@ npm start
 
 浏览器打开：`http://localhost:3000`
 
+## Vercel 部署
+
+- 本项目已包含 Vercel 所需文件：`api/detect.js` 和 `vercel.json`
+- 在 Vercel 导入 GitHub 仓库后，保持默认即可（无需额外 Build Command）
+- 在 Vercel 项目环境变量中添加：
+  - `VOLC_API_KEY`
+  - `VOLC_MODEL_ID`
+- 重新部署后直接访问分配的域名即可
+
 ## 4) 接口说明
 
 - `POST /api/detect`
@@ -70,3 +79,4 @@ npm start
 - `请上传有效的图片`：确保是 `data:image/...;base64,...` 格式
 - `fetch failed`：通常是服务进程所在环境网络受限，重启服务并确保可访问 `ark.cn-beijing.volces.com`
 - `InvalidEndpointOrModel.NotFound`：`VOLC_MODEL_ID` 填错了，必须是你控制台创建的接入点 ID（`ep-...`），不是 `doubao-vision-pro-32k` 这种模型名
+- Vercel `404: NOT_FOUND`：确认仓库里包含 `vercel.json`，并且已重新部署最新 commit
